@@ -1,0 +1,168 @@
+#!/bin/bash
+
+# MR Generator - удобный wrapper для генерации описаний MR
+# Использование: ./mr [опции] <путь_к_репозиторию>
+
+set -e
+
+# Цвета для вывода
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m' # No Color
+
+# Функция для вывода справки
+show_help() {
+    echo "🤖 MR Description Generator - Быстрый wrapper"
+    echo ""
+    echo "Использование: $0 [опции] <путь_к_репозиторию>"
+    echo ""
+    echo "Опции:"
+    echo "  -p, --provider PROVIDER   Провайдер (deepseek|gigachat, по умолчанию: deepseek)"
+    echo "  -b, --branch BRANCH       Ветка (по умолчанию: текущая)"
+    echo "  -o, --output FILE         Сохранить в файл"
+    echo "  -l, --language LANG       Язык (ru|en, по умолчанию: ru)"
+    echo "  -d, --dry-run            Тестовый режим"
+    echo "  -t, --no-technical       Без технических деталей"
+    echo "  -h, --help               Показать справку"
+    echo ""
+    echo "Примеры:"
+    echo "  $0 ~/projects/my-app"
+    echo "  $0 -p gigachat -o desc.md ~/projects/my-app"
+    echo "  $0 -d -b feature/auth ~/projects/my-app"
+}
+
+# Параметры по умолчанию
+PROVIDER="deepseek"
+BRANCH=""
+OUTPUT=""
+LANGUAGE="ru"
+DRY_RUN=""
+NO_TECHNICAL=""
+REPO_PATH=""
+
+# Парсинг аргументов
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        -p|--provider)
+            PROVIDER="$2"
+            shift 2
+            ;;
+        -b|--branch)
+            BRANCH="$2"
+            shift 2
+            ;;
+        -o|--output)
+            OUTPUT="$2"
+            shift 2
+            ;;
+        -l|--language)
+            LANGUAGE="$2"
+            shift 2
+            ;;
+        -d|--dry-run)
+            DRY_RUN="--dry-run"
+            shift
+            ;;
+        -t|--no-technical)
+            NO_TECHNICAL="--no-technical"
+            shift
+            ;;
+        -h|--help)
+            show_help
+            exit 0
+            ;;
+        -*)
+            echo -e "${RED}❌ Неизвестная опция: $1${NC}"
+            show_help
+            exit 1
+            ;;
+        *)
+            if [ -z "$REPO_PATH" ]; then
+                REPO_PATH="$1"
+            else
+                echo -e "${RED}❌ Слишком много аргументов${NC}"
+                show_help
+                exit 1
+            fi
+            shift
+            ;;
+    esac
+done
+
+# Проверяем, что путь к репозиторию указан
+if [ -z "$REPO_PATH" ]; then
+    echo -e "${RED}❌ Не указан путь к репозиторию${NC}"
+    show_help
+    exit 1
+fi
+
+# Проверяем, что репозиторий существует
+if [ ! -d "$REPO_PATH" ]; then
+    echo -e "${RED}❌ Директория не существует: $REPO_PATH${NC}"
+    exit 1
+fi
+
+# Переходим в директорию скрипта
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$SCRIPT_DIR"
+
+# Проверяем виртуальное окружение
+if [ ! -f "venv/bin/activate" ]; then
+    echo -e "${YELLOW}📦 Создание виртуального окружения...${NC}"
+    python3 -m venv venv
+fi
+
+# Активируем окружение
+source venv/bin/activate
+
+# Проверяем зависимости
+if [ ! -f "venv/lib/python3.*/site-packages/requests" ]; then
+    echo -e "${YELLOW}📦 Установка зависимостей...${NC}"
+    pip install -q --upgrade pip
+    pip install -q -r requirements.txt
+fi
+
+# Формируем команду
+COMMAND="python mr_generator.py --provider $PROVIDER --repo-path \"$REPO_PATH\""
+
+if [ -n "$BRANCH" ]; then
+    COMMAND="$COMMAND --branch $BRANCH"
+fi
+
+if [ -n "$OUTPUT" ]; then
+    COMMAND="$COMMAND --output $OUTPUT"
+fi
+
+if [ -n "$LANGUAGE" ]; then
+    COMMAND="$COMMAND --language $LANGUAGE"
+fi
+
+if [ -n "$DRY_RUN" ]; then
+    COMMAND="$COMMAND $DRY_RUN"
+fi
+
+if [ -n "$NO_TECHNICAL" ]; then
+    COMMAND="$COMMAND $NO_TECHNICAL"
+fi
+
+# Показываем что будем делать
+echo -e "${BLUE}🤖 MR Description Generator${NC}"
+echo -e "${BLUE}============================${NC}"
+echo -e "📁 Репозиторий: ${GREEN}$REPO_PATH${NC}"
+echo -e "🧠 Провайдер: ${GREEN}$PROVIDER${NC}"
+echo -e "🌐 Язык: ${GREEN}$LANGUAGE${NC}"
+
+if [ -n "$BRANCH" ]; then
+    echo -e "🌿 Ветка: ${GREEN}$BRANCH${NC}"
+fi
+
+if [ -n "$DRY_RUN" ]; then
+    echo -e "🧪 Режим: ${YELLOW}Тестовый (dry-run)${NC}"
+fi
+
+echo ""
+
+# Выполняем команду
+eval $COMMAND
